@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scripta: event sourcing and DDD for Java</title>
+  <meta name="description" content="Scripta is an open-source event sourcing and domain-driven design framework for Java 21, built on plain records and sealed types with zero runtime dependencies in the core. Early development.">
+  <link rel="canonical" href="https://scriptaframework.dev/">
+  <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#1B2130" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#F7F3EA" media="(prefers-color-scheme: light)">
+
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" href="/scripta-icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Scripta">
+  <meta property="og:title" content="Scripta: event sourcing and DDD for Java">
+  <meta property="og:description" content="Event sourcing and DDD for Java, without the ceremony. Open source, early development.">
+  <meta property="og:url" content="https://scriptaframework.dev/">
+  <meta property="og:image" content="https://scriptaframework.dev/icon-512.png">
+  <meta property="og:image:width" content="512">
+  <meta property="og:image:height" content="512">
+  <meta property="og:image:alt" content="The Scripta logo: an S built from stacked log entries">
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Scripta: event sourcing and DDD for Java">
+  <meta name="twitter:description" content="Event sourcing and DDD for Java, without the ceremony. Open source, early development.">
+  <meta name="twitter:image" content="https://scriptaframework.dev/icon-512.png">
+  <meta name="twitter:image:alt" content="The Scripta logo: an S built from stacked log entries">
+
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="hero">
+    <div class="wrap">
+      <img class="logo" src="/scripta-icon.svg" alt="" width="96" height="96">
+      <h1>Scripta</h1>
+      <p class="tagline">Event sourcing and DDD for Java, without the ceremony.</p>
+      <div class="actions">
+        <a class="button button-secondary" href="https://github.com/scripta-framework/scripta">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+          View on GitHub
+        </a>
+        <a class="button button-primary" href="#quickstart">Get started</a>
+      </div>
+      <p class="status">Open source under Apache 2.0. Early development: not yet released.</p>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="name" aria-labelledby="name-title">
+      <div class="wrap">
+        <h2 id="name-title">The name</h2>
+        <blockquote lang="la">
+          <p>Verba volant, scripta manent.</p>
+          <footer lang="en"><a href="https://en.wikipedia.org/wiki/Verba_volant,_scripta_manent">Latin proverb</a>: spoken words fly away, written words remain.</footer>
+        </blockquote>
+        <p>That is the whole idea behind event sourcing. In Scripta, every event is written once and kept forever, and the current state of your domain is simply what those events add up to.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="code-title">
+      <div class="wrap">
+        <h2 id="code-title">What it looks like</h2>
+        <p class="lead">An aggregate is a plain Java class. Events are records behind a sealed interface, so the compiler checks that every event is handled.</p>
+
+        <div class="code-grid">
+          <figure class="code">
+            <figcaption>BankAccount.java</figcaption>
+<pre tabindex="0"><code><span class="k">public sealed interface</span> <span class="t">AccountEvent</span> {
+    <span class="k">record</span> <span class="t">AccountOpened</span>(<span class="t">String</span> owner) <span class="k">implements</span> <span class="t">AccountEvent</span> {}
+    <span class="k">record</span> <span class="t">MoneyDeposited</span>(<span class="t">BigDecimal</span> amount) <span class="k">implements</span> <span class="t">AccountEvent</span> {}
+    <span class="k">record</span> <span class="t">MoneyWithdrawn</span>(<span class="t">BigDecimal</span> amount) <span class="k">implements</span> <span class="t">AccountEvent</span> {}
+}
+
+<span class="k">public final class</span> <span class="t">BankAccount</span> <span class="k">extends</span> <span class="t">Aggregate</span>&lt;<span class="t">AccountEvent</span>&gt; {
+    <span class="k">private</span> <span class="t">BigDecimal</span> balance = <span class="t">BigDecimal</span>.ZERO;
+
+    <span class="k">public void</span> <span class="m">deposit</span>(<span class="t">BigDecimal</span> amount) {
+        <span class="k">if</span> (amount.signum() &lt;= <span class="n">0</span>) <span class="k">throw new</span> <span class="t">IllegalArgumentException</span>(<span class="s">"Amount must be positive"</span>);
+        raise(<span class="k">new</span> <span class="t">MoneyDeposited</span>(amount));
+    }
+
+    <span class="k">public void</span> <span class="m">withdraw</span>(<span class="t">BigDecimal</span> amount) {
+        <span class="k">if</span> (balance.compareTo(amount) &lt; <span class="n">0</span>) <span class="k">throw new</span> <span class="t">IllegalStateException</span>(<span class="s">"Insufficient funds"</span>);
+        raise(<span class="k">new</span> <span class="t">MoneyWithdrawn</span>(amount));
+    }
+
+    <span class="a">@Override</span>
+    <span class="k">protected void</span> <span class="m">apply</span>(<span class="t">AccountEvent</span> event) {
+        <span class="k">switch</span> (event) {
+            <span class="k">case</span> <span class="t">AccountOpened</span> e  -&gt; balance = <span class="t">BigDecimal</span>.ZERO;
+            <span class="k">case</span> <span class="t">MoneyDeposited</span> e -&gt; balance = balance.add(e.amount());
+            <span class="k">case</span> <span class="t">MoneyWithdrawn</span> e -&gt; balance = balance.subtract(e.amount());
+        }
+    }
+}</code></pre>
+          </figure>
+
+          <figure class="code">
+            <figcaption>BankAccountTest.java</figcaption>
+<pre tabindex="0"><code><span class="a">@Test</span>
+<span class="k">void</span> <span class="m">withdrawingRaisesMoneyWithdrawn</span>() {
+    given(<span class="k">new</span> <span class="t">AccountOpened</span>(<span class="s">"Ada"</span>), <span class="k">new</span> <span class="t">MoneyDeposited</span>(<span class="k">new</span> <span class="t">BigDecimal</span>(<span class="s">"100"</span>)))
+        .when(account -&gt; account.withdraw(<span class="k">new</span> <span class="t">BigDecimal</span>(<span class="s">"30"</span>)))
+        .then(<span class="k">new</span> <span class="t">MoneyWithdrawn</span>(<span class="k">new</span> <span class="t">BigDecimal</span>(<span class="s">"30"</span>)));
+}</code></pre>
+          </figure>
+        </div>
+        <p class="note">Scripta is pre-release, so the API shown here is a design target and may still change.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="principles-title">
+      <div class="wrap">
+        <h2 id="principles-title">Principles</h2>
+        <ul class="cards">
+          <li>
+            <h3>Zero runtime dependencies</h3>
+            <p>The core module depends on the JDK and nothing else. Integrations live in separate, optional modules.</p>
+          </li>
+          <li>
+            <h3>Plain Java, no magic</h3>
+            <p>Aggregates and events are ordinary classes, records and sealed types. No reflection tricks, no bytecode generation.</p>
+          </li>
+          <li>
+            <h3>Optimistic concurrency</h3>
+            <p>Every append checks the expected stream version, so conflicting writes fail loudly instead of silently overwriting.</p>
+          </li>
+          <li>
+            <h3>Projections you can trust</h3>
+            <p>Read models track checkpoints and can be rebuilt from the event log whenever their shape changes.</p>
+          </li>
+          <li>
+            <h3>Testing first</h3>
+            <p>Given/when/then fixtures let you test behaviour as events in, events out, without a database.</p>
+          </li>
+          <li>
+            <h3>Pluggable storage</h3>
+            <p>The event store sits behind a small interface. PostgreSQL is the first implementation.</p>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="quickstart" aria-labelledby="quickstart-title">
+      <div class="wrap">
+        <h2 id="quickstart-title">Quickstart</h2>
+        <div class="callout">
+          <p><strong>Scripta is in early development and is not yet published to Maven Central.</strong> The coordinates below are the ones it will use. Until a release is out, build the project from source with <code>mvn install</code> to use the snapshot locally.</p>
+        </div>
+        <figure class="code">
+          <figcaption>pom.xml</figcaption>
+<pre tabindex="0"><code>&lt;<span class="g">dependency</span>&gt;
+    &lt;<span class="g">groupId</span>&gt;dev.scriptaframework&lt;/<span class="g">groupId</span>&gt;
+    &lt;<span class="g">artifactId</span>&gt;scripta-core&lt;/<span class="g">artifactId</span>&gt;
+    &lt;<span class="g">version</span>&gt;0.1.0-SNAPSHOT&lt;/<span class="g">version</span>&gt;
+&lt;/<span class="g">dependency</span>&gt;</code></pre>
+        </figure>
+        <p class="note">Requires Java 21 or newer.</p>
+      </div>
+    </section>
+
+    <section aria-labelledby="roadmap-title">
+      <div class="wrap">
+        <h2 id="roadmap-title">Roadmap</h2>
+        <p class="lead">Nothing here is finished yet. This is the order things are being built in.</p>
+        <ol class="roadmap">
+          <li><span>Core: aggregates, events, repositories, test fixtures</span> <span class="badge badge-active">In progress</span></li>
+          <li><span>PostgreSQL event store</span> <span class="badge">Planned</span></li>
+          <li><span>Jackson serialization</span> <span class="badge">Planned</span></li>
+          <li><span>Spring Boot starter</span> <span class="badge">Planned</span></li>
+        </ol>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <p class="motto" lang="la">Scripta manent.</p>
+      <ul>
+        <li><a href="https://github.com/scripta-framework/scripta/blob/main/LICENSE">Apache License 2.0</a></li>
+        <li><a href="https://github.com/scripta-framework/scripta">GitHub</a></li>
+        <li>&copy; 2026 Scripta contributors</li>
+      </ul>
+    </div>
+  </footer>
+
+  <script>
+    if (navigator.clipboard) document.querySelectorAll('.code').forEach(function (fig) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'copy'; b.textContent = 'Copy';
+      b.addEventListener('click', function () {
+        navigator.clipboard.writeText(fig.querySelector('code').innerText).then(function () {
+          b.textContent = 'Copied'; setTimeout(function () { b.textContent = 'Copy'; }, 1500);
+        });
+      });
+      fig.appendChild(b);
+    });
+  </script>
+</body>
+</html>
