@@ -1,4 +1,4 @@
-package dev.scriptaframework.core.bankaccount;
+package dev.scriptaframework.core.bankaccount.exception;
 
 /** Thrown when operating on an account that has not been opened. */
 public final class AccountNotOpenException extends AccountException {

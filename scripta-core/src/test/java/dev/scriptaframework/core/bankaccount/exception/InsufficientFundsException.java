@@ -1,5 +1,6 @@
-package dev.scriptaframework.core.bankaccount;
+package dev.scriptaframework.core.bankaccount.exception;
 
+import dev.scriptaframework.core.bankaccount.AccountId;
 import java.math.BigDecimal;
 
 /** Thrown when a withdrawal exceeds the account balance. */

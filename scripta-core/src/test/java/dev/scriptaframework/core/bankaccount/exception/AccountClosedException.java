@@ -1,4 +1,6 @@
-package dev.scriptaframework.core.bankaccount;
+package dev.scriptaframework.core.bankaccount.exception;
+
+import dev.scriptaframework.core.bankaccount.AccountId;
 
 /** Thrown when operating on a closed account. */
 public final class AccountClosedException extends AccountException {

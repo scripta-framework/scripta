@@ -1,4 +1,6 @@
-package dev.scriptaframework.core.bankaccount;
+package dev.scriptaframework.core.bankaccount.exception;
+
+import dev.scriptaframework.core.bankaccount.AccountId;
 
 /** Thrown when opening an account that is already open. */
 public final class AccountAlreadyOpenedException extends AccountException {

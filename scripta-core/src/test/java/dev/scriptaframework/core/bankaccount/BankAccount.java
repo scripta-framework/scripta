@@ -1,10 +1,15 @@
 package dev.scriptaframework.core.bankaccount;
 
 import dev.scriptaframework.core.AggregateRoot;
-import dev.scriptaframework.core.bankaccount.AccountEvent.AccountClosed;
-import dev.scriptaframework.core.bankaccount.AccountEvent.AccountOpened;
-import dev.scriptaframework.core.bankaccount.AccountEvent.MoneyDeposited;
-import dev.scriptaframework.core.bankaccount.AccountEvent.MoneyWithdrawn;
+import dev.scriptaframework.core.bankaccount.event.AccountEvent;
+import dev.scriptaframework.core.bankaccount.event.AccountEvent.AccountClosed;
+import dev.scriptaframework.core.bankaccount.event.AccountEvent.AccountOpened;
+import dev.scriptaframework.core.bankaccount.event.AccountEvent.MoneyDeposited;
+import dev.scriptaframework.core.bankaccount.event.AccountEvent.MoneyWithdrawn;
+import dev.scriptaframework.core.bankaccount.exception.AccountAlreadyOpenedException;
+import dev.scriptaframework.core.bankaccount.exception.AccountClosedException;
+import dev.scriptaframework.core.bankaccount.exception.AccountNotOpenException;
+import dev.scriptaframework.core.bankaccount.exception.InsufficientFundsException;
 import java.math.BigDecimal;
 
 /** Example aggregate: a bank account that can be opened, funded, drawn on and closed. */
