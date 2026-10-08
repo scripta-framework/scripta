@@ -102,6 +102,19 @@ class AggregateRootTest {
     }
 
     @Test
+    void firstEventCanBeRetriedAfterFailing() {
+        var counter = new Counter();
+        assertThatThrownBy(() -> counter.handle(new CounterEvent.FaultyCreated("c-1")))
+                .hasMessage("boom");
+
+        counter.handle(new CounterEvent.Created("c-2"));
+
+        assertThat(counter.id()).isEqualTo("c-2");
+        assertThat(counter.version()).isZero();
+        assertThat(counter.uncommittedEvents()).containsExactly(new CounterEvent.Created("c-2"));
+    }
+
+    @Test
     void firstEventMustAssignId() {
         var counter = new Counter();
 

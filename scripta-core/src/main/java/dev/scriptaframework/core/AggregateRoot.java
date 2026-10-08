@@ -179,11 +179,20 @@ public abstract class AggregateRoot<ID, E extends DomainEvent> {
     }
 
     // The single place where the version advances. Snapshot support can later restore id and
-    // version to a known point and replay the remaining events through here.
+    // version to a known point and replay the remaining events through here; with a restored
+    // version, no event takes the first-event path.
     private void applyAndAdvance(E event) {
         Objects.requireNonNull(event, "event");
-        ID idBefore = id;
-        applyingFirstEvent = version == -1;
+        if (version == -1) {
+            applyFirstEvent(event);
+        } else {
+            apply(event);
+        }
+        version++;
+    }
+
+    private void applyFirstEvent(E event) {
+        applyingFirstEvent = true;
         try {
             apply(event);
             if (id == null) {
@@ -191,11 +200,10 @@ public abstract class AggregateRoot<ID, E extends DomainEvent> {
                         + " is the aggregate's first event but did not assign an aggregate id");
             }
         } catch (RuntimeException | Error e) {
-            id = idBefore;
+            id = null; // the first event did not happen, so neither did its id
             throw e;
         } finally {
             applyingFirstEvent = false;
         }
-        version++;
     }
 }
