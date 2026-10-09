@@ -16,7 +16,18 @@ import java.util.Objects;
  * <pre>{@code
  * public final class BankAccount extends AggregateRoot<AccountId, AccountEvent> {
  *
+ *     private String owner;
  *     private BigDecimal balance = BigDecimal.ZERO;
+ *
+ *     private BankAccount(AccountId id) {
+ *         super(id);
+ *     }
+ *
+ *     public static BankAccount open(AccountId id, String owner) {
+ *         var account = new BankAccount(id);
+ *         account.raise(new AccountOpened(owner));
+ *         return account;
+ *     }
  *
  *     public void deposit(BigDecimal amount) {
  *         // check invariants, then:
@@ -26,17 +37,21 @@ import java.util.Objects;
  *     @Override
  *     protected void apply(AccountEvent event) {
  *         switch (event) {
- *             case AccountOpened e -> assignId(e.accountId());
+ *             case AccountOpened e -> owner = e.owner();
  *             case MoneyDeposited e -> balance = balance.add(e.amount());
  *         }
  *     }
  * }
  * }</pre>
  *
- * <h2>Identity</h2>
- * The aggregate's identifier comes from its first event: while applying that event, the
- * subclass calls {@link #assignId(Object) assignId}. Applying a first event that does not
- * assign an identifier fails with {@link IllegalStateException}.
+ * <h2>Creation</h2>
+ * The identifier is passed to the constructor and never changes, so {@link #id()} is never
+ * null. Keep the subclass constructor private and create aggregates through static factories
+ * named after the domain operation, such as {@code BankAccount.open(id, owner)}, that raise the
+ * creation event. That way application code cannot obtain an aggregate that was never created
+ * in the domain's terms, and needs no "not yet created" checks. For loading,
+ * the subclass can offer a factory that constructs an instance and calls
+ * {@link #rehydrate(List) rehydrate}.
  *
  * <h2>Version</h2>
  * {@link #version()} is {@code -1} for a new aggregate and otherwise the 0-based position of
@@ -52,15 +67,18 @@ import java.util.Objects;
  */
 public abstract class AggregateRoot<ID, E extends DomainEvent> {
 
-    private ID id;
+    private final ID id;
     private long version = -1;
     private final List<E> uncommittedEvents = new ArrayList<>();
-    private boolean applyingFirstEvent;
 
     /**
-     * Creates a new aggregate with no identifier, version {@code -1} and no events.
+     * Creates a new aggregate with the given identifier, version {@code -1} and no events.
+     *
+     * @param id the identifier
+     * @throws NullPointerException if {@code id} is null
      */
-    protected AggregateRoot() {
+    protected AggregateRoot(ID id) {
+        this.id = Objects.requireNonNull(id, "id");
     }
 
     /**
@@ -68,13 +86,12 @@ public abstract class AggregateRoot<ID, E extends DomainEvent> {
      *
      * <p>Call this from command methods after all invariants have been checked. The bookkeeping
      * is atomic: if {@link #apply(DomainEvent) apply} throws, the event is not recorded, the
-     * version and identifier are unchanged and the exception propagates. The subclass's own
+     * version is unchanged and the exception propagates. The subclass's own
      * fields, however, may have been partially modified by {@code apply} before it threw;
      * {@code apply} should not throw in the first place.
      *
      * @param event the event to raise
-     * @throws NullPointerException  if {@code event} is null
-     * @throws IllegalStateException if this is the first event and it does not assign an identifier
+     * @throws NullPointerException if {@code event} is null
      */
     protected final void raise(E event) {
         applyAndAdvance(event);
@@ -87,36 +104,16 @@ public abstract class AggregateRoot<ID, E extends DomainEvent> {
      * <p>Implementations only change fields: no validation, no side effects, no calls to
      * {@link #raise(DomainEvent) raise}. Events are facts, so applying one must not fail.
      * Use a {@code switch} over the sealed event type so the compiler checks that every event
-     * is handled. The creation event must call {@link #assignId(Object) assignId}.
+     * is handled.
      *
      * @param event the event to apply, never null
      */
     protected abstract void apply(E event);
 
     /**
-     * Sets the aggregate identifier. Call this from {@link #apply(DomainEvent) apply} while
-     * handling the aggregate's first event, and only then.
+     * Returns the aggregate identifier.
      *
-     * @param id the identifier
-     * @throws NullPointerException  if {@code id} is null
-     * @throws IllegalStateException if not called while applying the first event, or called twice
-     */
-    protected final void assignId(ID id) {
-        Objects.requireNonNull(id, "id");
-        if (!applyingFirstEvent) {
-            throw new IllegalStateException(
-                    "assignId may only be called while applying the aggregate's first event");
-        }
-        if (this.id != null) {
-            throw new IllegalStateException("Aggregate id already assigned: " + this.id);
-        }
-        this.id = id;
-    }
-
-    /**
-     * Returns the aggregate identifier, or {@code null} if no event has been applied yet.
-     *
-     * @return the identifier, or {@code null} for a new aggregate
+     * @return the identifier, never null
      */
     public final ID id() {
         return id;
@@ -164,8 +161,7 @@ public abstract class AggregateRoot<ID, E extends DomainEvent> {
      *
      * @param history the aggregate's events, oldest first
      * @throws NullPointerException  if {@code history} or any event in it is null
-     * @throws IllegalStateException if the aggregate already has state or uncommitted events, or
-     *                               if the first event does not assign an identifier
+     * @throws IllegalStateException if the aggregate already has state or uncommitted events
      */
     public final void rehydrate(List<? extends E> history) {
         Objects.requireNonNull(history, "history");
@@ -178,32 +174,11 @@ public abstract class AggregateRoot<ID, E extends DomainEvent> {
         }
     }
 
-    // The single place where the version advances. Snapshot support can later restore id and
-    // version to a known point and replay the remaining events through here; with a restored
-    // version, no event takes the first-event path.
+    // The single place where the version advances. Snapshot support can later restore the
+    // version to a known point and replay the remaining events through here.
     private void applyAndAdvance(E event) {
         Objects.requireNonNull(event, "event");
-        if (version == -1) {
-            applyFirstEvent(event);
-        } else {
-            apply(event);
-        }
+        apply(event);
         version++;
-    }
-
-    private void applyFirstEvent(E event) {
-        applyingFirstEvent = true;
-        try {
-            apply(event);
-            if (id == null) {
-                throw new IllegalStateException(event.getClass().getSimpleName()
-                        + " is the aggregate's first event but did not assign an aggregate id");
-            }
-        } catch (RuntimeException | Error e) {
-            id = null; // the first event did not happen, so neither did its id
-            throw e;
-        } finally {
-            applyingFirstEvent = false;
-        }
     }
 }

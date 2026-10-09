@@ -9,7 +9,7 @@ package dev.scriptaframework.core;
  *
  * <pre>{@code
  * public sealed interface AccountEvent extends DomainEvent {
- *     record AccountOpened(AccountId accountId, String owner) implements AccountEvent {}
+ *     record AccountOpened(String owner) implements AccountEvent {}
  *     record MoneyDeposited(BigDecimal amount) implements AccountEvent {}
  * }
  * }</pre>

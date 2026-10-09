@@ -11,19 +11,10 @@ import org.junit.jupiter.api.Test;
 class AggregateRootTest {
 
     sealed interface CounterEvent extends DomainEvent {
-        record Created(String id) implements CounterEvent {}
-
         record Incremented() implements CounterEvent {}
-
-        record CreatedWithoutId() implements CounterEvent {}
 
         /** Partially mutates state, then fails. */
         record Faulty() implements CounterEvent {}
-
-        /** Assigns the id, then fails. */
-        record FaultyCreated(String id) implements CounterEvent {}
-
-        record AssignsIdAgain(String id) implements CounterEvent {}
     }
 
     static final class Counter extends AggregateRoot<String, CounterEvent> {
@@ -31,52 +22,56 @@ class AggregateRootTest {
         final List<String> log = new ArrayList<>();
         int count;
 
-        void handle(CounterEvent event) {
-            raise(event);
+        Counter(String id) {
+            super(id);
         }
 
-        void tryAssignId(String id) {
-            assignId(id);
+        void handle(CounterEvent event) {
+            raise(event);
         }
 
         @Override
         protected void apply(CounterEvent event) {
             switch (event) {
-                case CounterEvent.Created e -> assignId(e.id());
                 case CounterEvent.Incremented e -> count++;
-                case CounterEvent.CreatedWithoutId e -> { }
                 case CounterEvent.Faulty e -> {
                     log.add("partially applied");
                     throw new IllegalStateException("boom");
                 }
-                case CounterEvent.FaultyCreated e -> {
-                    assignId(e.id());
-                    throw new IllegalStateException("boom");
-                }
-                case CounterEvent.AssignsIdAgain e -> assignId(e.id());
             }
         }
     }
 
-    private static Counter created() {
-        var counter = new Counter();
-        counter.handle(new CounterEvent.Created("c-1"));
-        counter.markCommitted();
-        return counter;
-    }
-
     @Test
-    void newAggregateHasNoIdNoVersionAndNoEvents() {
-        var counter = new Counter();
+    void newAggregateHasItsIdButNoVersionAndNoEvents() {
+        var counter = new Counter("c-1");
 
-        assertThat(counter.id()).isNull();
+        assertThat(counter.id()).isEqualTo("c-1");
         assertThat(counter.version()).isEqualTo(-1);
         assertThat(counter.uncommittedEvents()).isEmpty();
     }
 
     @Test
+    void idIsRequired() {
+        assertThatThrownBy(() -> new Counter(null))
+                .isInstanceOf(NullPointerException.class)
+                .hasMessage("id");
+    }
+
+    @Test
+    void raiseAppliesAndRecordsTheEvent() {
+        var counter = new Counter("c-1");
+
+        counter.handle(new CounterEvent.Incremented());
+
+        assertThat(counter.count).isEqualTo(1);
+        assertThat(counter.version()).isZero();
+        assertThat(counter.uncommittedEvents()).containsExactly(new CounterEvent.Incremented());
+    }
+
+    @Test
     void raiseIsAtomicWhenApplyThrows() {
-        var counter = created();
+        var counter = new Counter("c-1");
         counter.handle(new CounterEvent.Incremented());
 
         assertThatThrownBy(() -> counter.handle(new CounterEvent.Faulty()))
@@ -84,65 +79,25 @@ class AggregateRootTest {
                 .hasMessage("boom");
 
         assertThat(counter.uncommittedEvents()).containsExactly(new CounterEvent.Incremented());
-        assertThat(counter.version()).isEqualTo(1);
+        assertThat(counter.version()).isZero();
         // The subclass's own state is not rolled back, as documented.
         assertThat(counter.log).containsExactly("partially applied");
     }
 
     @Test
     void failedFirstEventLeavesAggregateNew() {
-        var counter = new Counter();
+        var counter = new Counter("c-1");
 
-        assertThatThrownBy(() -> counter.handle(new CounterEvent.FaultyCreated("c-1")))
-                .hasMessage("boom");
+        assertThatThrownBy(() -> counter.handle(new CounterEvent.Faulty())).hasMessage("boom");
 
-        assertThat(counter.id()).isNull();
-        assertThat(counter.version()).isEqualTo(-1);
-        assertThat(counter.uncommittedEvents()).isEmpty();
-    }
-
-    @Test
-    void firstEventCanBeRetriedAfterFailing() {
-        var counter = new Counter();
-        assertThatThrownBy(() -> counter.handle(new CounterEvent.FaultyCreated("c-1")))
-                .hasMessage("boom");
-
-        counter.handle(new CounterEvent.Created("c-2"));
-
-        assertThat(counter.id()).isEqualTo("c-2");
-        assertThat(counter.version()).isZero();
-        assertThat(counter.uncommittedEvents()).containsExactly(new CounterEvent.Created("c-2"));
-    }
-
-    @Test
-    void firstEventMustAssignId() {
-        var counter = new Counter();
-
-        assertThatThrownBy(() -> counter.handle(new CounterEvent.CreatedWithoutId()))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("CreatedWithoutId")
-                .hasMessageContaining("did not assign an aggregate id");
-        assertThat(counter.version()).isEqualTo(-1);
-        assertThat(counter.uncommittedEvents()).isEmpty();
-    }
-
-    @Test
-    void idCanOnlyBeAssignedWhileApplyingFirstEvent() {
-        var counter = created();
-
-        assertThatThrownBy(() -> counter.handle(new CounterEvent.AssignsIdAgain("c-2")))
-                .isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> counter.tryAssignId("c-2"))
-                .isInstanceOf(IllegalStateException.class);
-        assertThatThrownBy(() -> new Counter().tryAssignId("c-2"))
-                .isInstanceOf(IllegalStateException.class);
         assertThat(counter.id()).isEqualTo("c-1");
-        assertThat(counter.version()).isZero();
+        assertThat(counter.version()).isEqualTo(-1);
+        assertThat(counter.uncommittedEvents()).isEmpty();
     }
 
     @Test
     void uncommittedEventsIsAnUnmodifiableSnapshot() {
-        var counter = created();
+        var counter = new Counter("c-1");
         counter.handle(new CounterEvent.Incremented());
 
         var events = counter.uncommittedEvents();
@@ -155,50 +110,50 @@ class AggregateRootTest {
 
     @Test
     void emptyHistoryLeavesAggregateNew() {
-        var counter = new Counter();
+        var counter = new Counter("c-1");
 
         counter.rehydrate(List.of());
 
-        assertThat(counter.id()).isNull();
+        assertThat(counter.id()).isEqualTo("c-1");
         assertThat(counter.version()).isEqualTo(-1);
     }
 
     @Test
     void cannotRehydrateAggregateWithState() {
-        var counter = created();
+        var counter = new Counter("c-1");
+        counter.handle(new CounterEvent.Incremented());
+        counter.markCommitted();
 
         assertThatThrownBy(() -> counter.rehydrate(List.of(new CounterEvent.Incremented())))
                 .isInstanceOf(IllegalStateException.class);
-        assertThat(counter.count).isZero();
+        assertThat(counter.count).isEqualTo(1);
         assertThat(counter.version()).isZero();
     }
 
     @Test
     void cannotRehydrateAggregateWithUncommittedEvents() {
-        var counter = new Counter();
-        counter.handle(new CounterEvent.Created("c-1"));
+        var counter = new Counter("c-1");
+        counter.handle(new CounterEvent.Incremented());
 
-        assertThatThrownBy(() -> counter.rehydrate(List.of(new CounterEvent.Created("c-1"))))
+        assertThatThrownBy(() -> counter.rehydrate(List.of(new CounterEvent.Incremented())))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void cannotRehydrateTwice() {
-        var counter = new Counter();
-        counter.rehydrate(List.of(new CounterEvent.Created("c-1")));
+        var counter = new Counter("c-1");
+        counter.rehydrate(List.of(new CounterEvent.Incremented()));
 
-        assertThatThrownBy(() -> counter.rehydrate(List.of(new CounterEvent.Created("c-1"))))
+        assertThatThrownBy(() -> counter.rehydrate(List.of(new CounterEvent.Incremented())))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void rejectsNulls() {
-        var counter = new Counter();
+        var counter = new Counter("c-1");
 
         assertThatThrownBy(() -> counter.handle(null)).isInstanceOf(NullPointerException.class);
         assertThatThrownBy(() -> counter.rehydrate(null)).isInstanceOf(NullPointerException.class);
-        assertThatThrownBy(() -> counter.handle(new CounterEvent.Created(null)))
-                .isInstanceOf(NullPointerException.class);
         assertThat(counter.version()).isEqualTo(-1);
     }
 }

@@ -8,9 +8,7 @@ import dev.scriptaframework.core.bankaccount.event.AccountEvent.AccountClosed;
 import dev.scriptaframework.core.bankaccount.event.AccountEvent.AccountOpened;
 import dev.scriptaframework.core.bankaccount.event.AccountEvent.MoneyDeposited;
 import dev.scriptaframework.core.bankaccount.event.AccountEvent.MoneyWithdrawn;
-import dev.scriptaframework.core.bankaccount.exception.AccountAlreadyOpenedException;
 import dev.scriptaframework.core.bankaccount.exception.AccountClosedException;
-import dev.scriptaframework.core.bankaccount.exception.AccountNotOpenException;
 import dev.scriptaframework.core.bankaccount.exception.InsufficientFundsException;
 import java.math.BigDecimal;
 import java.util.List;
@@ -22,8 +20,7 @@ class BankAccountTest {
     private final AccountId id = AccountId.random();
 
     private BankAccount openAccountWith(String balance) {
-        var account = new BankAccount();
-        account.open(id, "Ada");
+        var account = BankAccount.open(id, "Ada");
         var amount = new BigDecimal(balance);
         if (amount.signum() > 0) {
             account.deposit(amount);
@@ -36,12 +33,10 @@ class BankAccountTest {
     class Commands {
 
         @Test
-        void openingRaisesAccountOpenedAndAssignsId() {
-            var account = new BankAccount();
+        void openingRaisesAccountOpened() {
+            var account = BankAccount.open(id, "Ada");
 
-            account.open(id, "Ada");
-
-            assertThat(account.uncommittedEvents()).containsExactly(new AccountOpened(id, "Ada"));
+            assertThat(account.uncommittedEvents()).containsExactly(new AccountOpened("Ada"));
             assertThat(account.id()).isEqualTo(id);
             assertThat(account.owner()).isEqualTo("Ada");
         }
@@ -87,15 +82,13 @@ class BankAccountTest {
 
         @Test
         void eventsAreRecordedInOrder() {
-            var account = new BankAccount();
-
-            account.open(id, "Ada");
+            var account = BankAccount.open(id, "Ada");
             account.deposit(new BigDecimal("100"));
             account.withdraw(new BigDecimal("30"));
             account.close();
 
             assertThat(account.uncommittedEvents()).containsExactly(
-                    new AccountOpened(id, "Ada"),
+                    new AccountOpened("Ada"),
                     new MoneyDeposited(new BigDecimal("100")),
                     new MoneyWithdrawn(new BigDecimal("30")),
                     new AccountClosed());
@@ -104,16 +97,6 @@ class BankAccountTest {
 
     @Nested
     class Invariants {
-
-        @Test
-        void cannotOpenTwice() {
-            var account = openAccountWith("0");
-
-            assertThatThrownBy(() -> account.open(AccountId.random(), "Bob"))
-                    .isInstanceOf(AccountAlreadyOpenedException.class);
-            assertThat(account.uncommittedEvents()).isEmpty();
-            assertThat(account.id()).isEqualTo(id);
-        }
 
         @Test
         void cannotWithdrawMoreThanBalance() {
@@ -150,17 +133,6 @@ class BankAccountTest {
         }
 
         @Test
-        void cannotOperateOnUnopenedAccount() {
-            var account = new BankAccount();
-
-            assertThatThrownBy(() -> account.deposit(BigDecimal.ONE)).isInstanceOf(AccountNotOpenException.class);
-            assertThatThrownBy(() -> account.withdraw(BigDecimal.ONE)).isInstanceOf(AccountNotOpenException.class);
-            assertThatThrownBy(account::close).isInstanceOf(AccountNotOpenException.class);
-            assertThat(account.uncommittedEvents()).isEmpty();
-            assertThat(account.version()).isEqualTo(-1);
-        }
-
-        @Test
         void amountsMustBePositive() {
             var account = openAccountWith("10");
 
@@ -182,21 +154,19 @@ class BankAccountTest {
     class Rehydration {
 
         private final List<AccountEvent> history = List.of(
-                new AccountOpened(id, "Ada"),
+                new AccountOpened("Ada"),
                 new MoneyDeposited(new BigDecimal("100")),
                 new MoneyWithdrawn(new BigDecimal("30")),
                 new MoneyDeposited(new BigDecimal("5")));
 
         @Test
         void rebuildsTheSameStateAsTheOriginalCommands() {
-            var original = new BankAccount();
-            original.open(id, "Ada");
+            var original = BankAccount.open(id, "Ada");
             original.deposit(new BigDecimal("100"));
             original.withdraw(new BigDecimal("30"));
             original.deposit(new BigDecimal("5"));
 
-            var rehydrated = new BankAccount();
-            rehydrated.rehydrate(original.uncommittedEvents());
+            var rehydrated = BankAccount.fromHistory(id, original.uncommittedEvents());
 
             assertThat(rehydrated.id()).isEqualTo(original.id());
             assertThat(rehydrated.owner()).isEqualTo(original.owner());
@@ -207,27 +177,22 @@ class BankAccountTest {
 
         @Test
         void doesNotRecordUncommittedEvents() {
-            var account = new BankAccount();
-
-            account.rehydrate(history);
+            var account = BankAccount.fromHistory(id, history);
 
             assertThat(account.uncommittedEvents()).isEmpty();
         }
 
         @Test
         void rehydratedAccountEnforcesInvariants() {
-            var account = new BankAccount();
-            account.rehydrate(List.of(new AccountOpened(id, "Ada"), new AccountClosed()));
+            var account = BankAccount.fromHistory(id, List.of(new AccountOpened("Ada"), new AccountClosed()));
 
             assertThat(account.isClosed()).isTrue();
             assertThatThrownBy(() -> account.deposit(BigDecimal.ONE)).isInstanceOf(AccountClosedException.class);
-            assertThatThrownBy(() -> account.open(id, "Ada")).isInstanceOf(AccountAlreadyOpenedException.class);
         }
 
         @Test
         void newEventsContinueFromTheRehydratedVersion() {
-            var account = new BankAccount();
-            account.rehydrate(history);
+            var account = BankAccount.fromHistory(id, history);
 
             account.withdraw(new BigDecimal("75"));
 
@@ -241,15 +206,13 @@ class BankAccountTest {
     class Versioning {
 
         @Test
-        void newAccountHasVersionMinusOne() {
-            assertThat(new BankAccount().version()).isEqualTo(-1);
+        void openedAccountHasVersionZero() {
+            assertThat(BankAccount.open(id, "Ada").version()).isZero();
         }
 
         @Test
         void eachRaisedEventIncrementsTheVersion() {
-            var account = new BankAccount();
-
-            account.open(id, "Ada");
+            var account = BankAccount.open(id, "Ada");
             assertThat(account.version()).isZero();
 
             account.deposit(BigDecimal.TEN);
@@ -259,17 +222,15 @@ class BankAccountTest {
 
         @Test
         void rehydratedAccountHasVersionOfLastEvent() {
-            var account = new BankAccount();
-
-            account.rehydrate(List.of(new AccountOpened(id, "Ada"), new MoneyDeposited(BigDecimal.TEN)));
+            var account = BankAccount.fromHistory(
+                    id, List.of(new AccountOpened("Ada"), new MoneyDeposited(BigDecimal.TEN)));
 
             assertThat(account.version()).isEqualTo(1);
         }
 
         @Test
         void markCommittedClearsEventsButKeepsVersion() {
-            var account = new BankAccount();
-            account.open(id, "Ada");
+            var account = BankAccount.open(id, "Ada");
             account.deposit(BigDecimal.TEN);
 
             account.markCommitted();
@@ -284,8 +245,7 @@ class BankAccountTest {
 
         @Test
         void failedCommandDoesNotChangeTheVersion() {
-            var account = new BankAccount();
-            account.open(id, "Ada");
+            var account = BankAccount.open(id, "Ada");
 
             assertThatThrownBy(() -> account.withdraw(BigDecimal.ONE)).isInstanceOf(InsufficientFundsException.class);
 
