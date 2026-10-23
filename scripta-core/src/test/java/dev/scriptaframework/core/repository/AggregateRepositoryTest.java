@@ -19,6 +19,7 @@ import dev.scriptaframework.core.eventstore.StreamId;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.function.BiFunction;
+import java.util.function.Function;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 
@@ -41,11 +42,46 @@ class AggregateRepositoryTest {
                 restore);
     }
 
+    private AggregateRepository<BankAccount, AccountId, AccountEvent> repositoryNamingStreams(
+            String category, Function<AccountId, String> idToText) {
+        return new AggregateRepository<>(
+                store,
+                category,
+                idToText,
+                AccountEvent.class,
+                event -> event.getClass().getSimpleName(),
+                BankAccount::restore);
+    }
+
     private BankAccount savedAccountWithBalance(String balance) {
         var account = BankAccount.open(id, "Ada");
         account.deposit(new BigDecimal(balance));
         accounts.save(account);
         return account;
+    }
+
+    @Nested
+    class Construction {
+
+        @Test
+        void aCategoryContainingADashIsRejected() {
+            assertThatThrownBy(() -> repositoryNamingStreams("bank-account", id -> id.value().toString()))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("bank-account");
+        }
+
+        @Test
+        void aBlankCategoryIsRejected() {
+            assertThatThrownBy(() -> repositoryNamingStreams(" ", id -> id.value().toString()))
+                    .isInstanceOf(IllegalArgumentException.class);
+        }
+
+        @Test
+        void aMissingStoreIsRejected() {
+            assertThatThrownBy(() -> repositoryOver(null, BankAccount::restore))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("store");
+        }
     }
 
     @Nested
@@ -95,6 +131,41 @@ class AggregateRepositoryTest {
                     .hasMessage("Stream " + stream.value() + " contains an event of class "
                             + ParcelShipped.class.getName() + " (stored as 'ParcelShipped', version 1),"
                             + " which is not an instance of AccountEvent");
+        }
+
+        @Test
+        void loadingANullIdIsRejected() {
+            assertThatThrownBy(() -> accounts.load(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("id");
+        }
+
+        @Test
+        void anIdToTextReturningNullFailsWithAClearError() {
+            var repository = repositoryNamingStreams("account", id -> null);
+
+            assertThatThrownBy(() -> repository.load(id))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("idToText returned null for id " + id);
+        }
+
+        @Test
+        void anIdToTextReturningBlankTextFailsWithAClearError() {
+            var repository = repositoryNamingStreams("account", id -> " ");
+
+            assertThatThrownBy(() -> repository.load(id))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("idToText returned blank text for id " + id);
+        }
+
+        @Test
+        void aRestoreFactoryReturningNullFails() {
+            var repository = repositoryOver(store, (accountId, history) -> null);
+            savedAccountWithBalance("10");
+
+            assertThatThrownBy(() -> repository.load(id))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("The restore factory returned null for stream " + stream.value());
         }
 
         @Test
@@ -181,6 +252,13 @@ class AggregateRepositoryTest {
         }
 
         @Test
+        void savingANullAggregateIsRejected() {
+            assertThatThrownBy(() -> accounts.save(null))
+                    .isInstanceOf(NullPointerException.class)
+                    .hasMessage("aggregate");
+        }
+
+        @Test
         void aNewAggregateCannotOverwriteAnExistingStream() {
             savedAccountWithBalance("10");
             var duplicate = BankAccount.open(id, "Grace");
@@ -196,7 +274,8 @@ class AggregateRepositoryTest {
             assertThatThrownBy(() -> repository.save(account))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessage("Stream " + stream.value()
-                            + " is at version 7 after saving, but the aggregate is at version 0");
+                            + " is at version 7 after saving, but the aggregate is at version 0."
+                            + " The events may already be stored; discard this aggregate instead of saving it again.");
             assertThat(account.uncommittedEvents()).hasSize(1);
         }
 

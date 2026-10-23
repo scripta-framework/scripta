@@ -69,7 +69,8 @@ public final class AggregateRepository<A extends AggregateRoot<ID, E>, ID, E ext
      * @param category      the stream category, such as {@code "account"}; non-blank and
      *                      without {@code '-'}
      * @param idToText      turns an id into the id part of the stream name, such as
-     *                      {@code id -> id.value().toString()}
+     *                      {@code id -> id.value().toString()}; a null or blank result fails the
+     *                      load or save with an error naming {@code idToText}
      * @param eventClass    the aggregate's event type; every stored payload must be an
      *                      instance of it
      * @param eventTypeName the name each event is stored under. <strong>Names are stored
@@ -114,7 +115,7 @@ public final class AggregateRepository<A extends AggregateRoot<ID, E>, ID, E ext
         if (recorded.isEmpty()) {
             return Optional.empty();
         }
-        A aggregate = restore.apply(id, payloadsOf(stream, recorded));
+        A aggregate = restore.apply(id, payloadsOf(recorded));
         requireConsistent(aggregate, id, stream, recorded.getLast().streamVersion());
         return Optional.of(aggregate);
     }
@@ -145,9 +146,13 @@ public final class AggregateRepository<A extends AggregateRoot<ID, E>, ID, E ext
      * @throws dev.scriptaframework.core.eventstore.ConcurrencyException if the stream changed
      *         since the aggregate was loaded; the aggregate keeps its uncommitted events
      * @throws IllegalStateException if the store reports a stream version that does not match
-     *         the aggregate's, which indicates a bug in the store
+     *         the aggregate's, which indicates a bug in the store. The events may already be
+     *         stored, so the aggregate is out of step with its stream and must be discarded, not
+     *         saved again.
+     * @throws NullPointerException if any argument is null
      */
     public void save(A aggregate, EventMetadata metadata) {
+        Objects.requireNonNull(aggregate, "aggregate");
         Objects.requireNonNull(metadata, "metadata");
         List<E> uncommitted = aggregate.uncommittedEvents();
         if (uncommitted.isEmpty()) {
@@ -164,7 +169,8 @@ public final class AggregateRepository<A extends AggregateRoot<ID, E>, ID, E ext
         if (result.streamVersion() != aggregate.version()) {
             throw new IllegalStateException("Stream " + stream.value() + " is at version "
                     + result.streamVersion() + " after saving, but the aggregate is at version "
-                    + aggregate.version());
+                    + aggregate.version() + ". The events may already be stored; discard this aggregate"
+                    + " instead of saving it again.");
         }
         aggregate.markCommitted();
     }
@@ -177,14 +183,19 @@ public final class AggregateRepository<A extends AggregateRoot<ID, E>, ID, E ext
 
     private StreamId streamOf(ID id) {
         Objects.requireNonNull(id, "id");
-        return StreamId.of(category, idToText.apply(id));
+        String text = idToText.apply(id);
+        Objects.requireNonNull(text, () -> "idToText returned null for id " + id);
+        if (text.isBlank()) {
+            throw new IllegalStateException("idToText returned blank text for id " + id);
+        }
+        return StreamId.of(category, text);
     }
 
-    private List<E> payloadsOf(StreamId stream, List<RecordedEvent> recorded) {
+    private List<E> payloadsOf(List<RecordedEvent> recorded) {
         List<E> payloads = new ArrayList<>(recorded.size());
         for (RecordedEvent event : recorded) {
             if (!eventClass.isInstance(event.payload())) {
-                throw new UnexpectedEventException(stream, event, eventClass);
+                throw new UnexpectedEventException(event, eventClass);
             }
             payloads.add(eventClass.cast(event.payload()));
         }

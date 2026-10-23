@@ -13,11 +13,11 @@ public final class UnexpectedEventException extends ScriptaException {
 
     private final StreamId streamId;
 
-    UnexpectedEventException(StreamId streamId, RecordedEvent event, Class<?> expectedType) {
-        super("Stream " + streamId.value() + " contains an event of class " + event.payload().getClass().getName()
+    UnexpectedEventException(RecordedEvent event, Class<?> expectedType) {
+        super("Stream " + event.streamId().value() + " contains an event of class " + event.payload().getClass().getName()
                 + " (stored as '" + event.eventType() + "', version " + event.streamVersion()
                 + "), which is not an instance of " + expectedType.getSimpleName());
-        this.streamId = streamId;
+        this.streamId = event.streamId();
     }
 
     /** The stream holding the unexpected event. */

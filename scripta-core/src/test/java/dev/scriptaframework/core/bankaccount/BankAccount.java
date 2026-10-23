@@ -30,7 +30,6 @@ public final class BankAccount extends AggregateRoot<AccountId, AccountEvent> {
         return account;
     }
 
-    // Used by the repository, which only calls it with a non-empty history.
     public static BankAccount restore(AccountId id, List<AccountEvent> history) {
         var account = new BankAccount(id);
         account.rehydrate(history);
