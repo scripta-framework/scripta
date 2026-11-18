@@ -166,7 +166,7 @@ class BankAccountTest {
             original.withdraw(new BigDecimal("30"));
             original.deposit(new BigDecimal("5"));
 
-            var rehydrated = BankAccount.fromHistory(id, original.uncommittedEvents());
+            var rehydrated = BankAccount.restore(id, original.uncommittedEvents());
 
             assertThat(rehydrated.id()).isEqualTo(original.id());
             assertThat(rehydrated.owner()).isEqualTo(original.owner());
@@ -177,14 +177,14 @@ class BankAccountTest {
 
         @Test
         void doesNotRecordUncommittedEvents() {
-            var account = BankAccount.fromHistory(id, history);
+            var account = BankAccount.restore(id, history);
 
             assertThat(account.uncommittedEvents()).isEmpty();
         }
 
         @Test
         void rehydratedAccountEnforcesInvariants() {
-            var account = BankAccount.fromHistory(id, List.of(new AccountOpened("Ada"), new AccountClosed()));
+            var account = BankAccount.restore(id, List.of(new AccountOpened("Ada"), new AccountClosed()));
 
             assertThat(account.isClosed()).isTrue();
             assertThatThrownBy(() -> account.deposit(BigDecimal.ONE)).isInstanceOf(AccountClosedException.class);
@@ -192,7 +192,7 @@ class BankAccountTest {
 
         @Test
         void newEventsContinueFromTheRehydratedVersion() {
-            var account = BankAccount.fromHistory(id, history);
+            var account = BankAccount.restore(id, history);
 
             account.withdraw(new BigDecimal("75"));
 
@@ -222,7 +222,7 @@ class BankAccountTest {
 
         @Test
         void rehydratedAccountHasVersionOfLastEvent() {
-            var account = BankAccount.fromHistory(
+            var account = BankAccount.restore(
                     id, List.of(new AccountOpened("Ada"), new MoneyDeposited(BigDecimal.TEN)));
 
             assertThat(account.version()).isEqualTo(1);

@@ -30,7 +30,7 @@ public final class BankAccount extends AggregateRoot<AccountId, AccountEvent> {
         return account;
     }
 
-    public static BankAccount fromHistory(AccountId id, List<? extends AccountEvent> history) {
+    public static BankAccount restore(AccountId id, List<AccountEvent> history) {
         var account = new BankAccount(id);
         account.rehydrate(history);
         return account;

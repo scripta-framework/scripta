@@ -49,9 +49,11 @@ import java.util.Objects;
  * null. Keep the subclass constructor private and create aggregates through static factories
  * named after the domain operation, such as {@code BankAccount.open(id, owner)}, that raise the
  * creation event. That way application code cannot obtain an aggregate that was never created
- * in the domain's terms, and needs no "not yet created" checks. For loading,
- * the subclass can offer a factory that constructs an instance and calls
- * {@link #rehydrate(List) rehydrate}.
+ * in the domain's terms, and needs no "not yet created" checks. For loading, the subclass offers
+ * a factory such as {@code BankAccount.restore(id, history)} that constructs an instance and
+ * calls {@link #rehydrate(List) rehydrate}; an
+ * {@link dev.scriptaframework.core.repository.AggregateRepository AggregateRepository} uses it
+ * to rebuild aggregates from their stored events.
  *
  * <h2>Version</h2>
  * {@link #version()} is {@code -1} for a new aggregate and otherwise the 0-based position of
